@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Signal Lost: Mission Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-black: #090913;
+    --navy-mid: #14142b;
+    --navy-panel: #1b1b3a;
+    --gold: #ffcf4d;
+    --gold-deep: #c98a1e;
+    --cyan: #4df3ff;
+    --green: #4dffa0;
+    --green-deep: #1f9e5e;
+    --red: #ff5d6c;
+    --red-deep: #a02832;
+    --ink: #f4f2ff;
+    --ink-dim: #a9a6d6;
+    --pixel-border: #000000;
+    --font-title: 'Press Start 2P', 'Courier New', monospace;
+    --font-body: 'VT323', 'Courier New', monospace;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg-black: #0c0c1c;
+      --navy-mid: #17173a;
+      --navy-panel: #1e1e46;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg-black: #090913;
+    --navy-mid: #14142b;
+    --navy-panel: #1b1b3a;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); height: 100%; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100%;
+    background:
+      radial-gradient(circle at 20% 10%, #22224a 0%, transparent 40%),
+      radial-gradient(circle at 85% 80%, #201840 0%, transparent 45%),
+      var(--bg-black);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 19px;
+    line-height: 1.45;
+    image-rendering: pixelated;
+  }
+  a { color: var(--gold); }
+
+  /* Starfield */
+  #stars {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.9;
+    background-image:
+      radial-gradient(1.5px 1.5px at 20% 30%, #fff 100%, transparent),
+      radial-gradient(1.5px 1.5px at 70% 65%, #fff 100%, transparent),
+      radial-gradient(1.5px 1.5px at 40% 80%, #fff 100%, transparent),
+      radial-gradient(1.5px 1.5px at 85% 15%, #fff 100%, transparent),
+      radial-gradient(1.5px 1.5px at 55% 45%, #fff 100%, transparent),
+      radial-gradient(1.5px 1.5px at 10% 70%, #fff 100%, transparent),
+      radial-gradient(1.5px 1.5px at 90% 85%, #fff 100%, transparent),
+      radial-gradient(1.5px 1.5px at 30% 55%, #fff 100%, transparent),
+      radial-gradient(1.5px 1.5px at 65% 25%, #fff 100%, transparent);
+    background-repeat: repeat;
+    background-size: 220px 220px;
+    box-shadow: none;
+  }
+  /* Scanline / CRT overlay */
+  #scanlines {
+    position: fixed; inset: 0; z-index: 50; pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0.16) 0px,
+      rgba(0,0,0,0.16) 1px,
+      transparent 2px,
+      transparent 3px
+    );
+    mix-blend-mode: overlay;
+  }
+  #vignette {
+    position: fixed; inset: 0; z-index: 49; pointer-events: none;
+    box-shadow: inset 0 0 140px rgba(0,0,0,0.65);
+  }
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.985; }
+  }
+  #scanlines { animation: flicker 5s infinite steps(2); }
+  @media (prefers-reduced-motion: reduce) {
+    #scanlines { animation: none; }
+  }
+
+  .app {
+    position: relative; z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px 16px 60px;
+  }
+
+  /* Pixel bevel utility: hard black outline + light/dark inner bevel, zero radius */
+  .pixel-box {
+    border: 4px solid var(--pixel-border);
+    border-radius: 0;
+    box-shadow:
+      inset 2px 2px 0 0 rgba(255,255,255,0.10),
+      inset -3px -3px 0 0 rgba(0,0,0,0.55),
+      6px 6px 0 0 rgba(0,0,0,0.6);
+  }
+
+  /* Header / HUD */
+  .hud {
+    position: sticky; top: env(safe-area-inset-top, 0px);
+    z-index: 5;
+    background: var(--navy-mid);
+    padding: 12px 14px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .hud-title {
+    font-family: var(--font-title);
+    font-size: 0.62rem;
+    line-height: 1.6;
+    color: var(--green);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+  }
+  .hud-title .dot { width: 10px; height: 10px; background: var(--green); box-shadow: 0 0 0 2px #000, 0 0 8px var(--green); }
+  .timer {
+    font-family: var(--font-body);
+    font-size: 1.7rem;
+    color: var(--gold);
+    font-weight: 400;
+    min-width: 78px;
+    text-align: right;
+    text-shadow: 2px 2px 0 rgba(0,0,0,0.6);
+  }
+  .progress-dots { display: flex; gap: 6px; }
+  .progress-dots .seg {
+    width: 20px; height: 20px;
+    background: var(--navy-panel);
+    border: 2px solid #000;
+    box-shadow: inset -2px -2px 0 rgba(0,0,0,0.5), inset 2px 2px 0 rgba(255,255,255,0.08);
+  }
+  .progress-dots .seg.done { background: var(--green); box-shadow: inset -2px -2px 0 var(--green-deep), inset 2px 2px 0 rgba(255,255,255,0.3); }
+  .progress-dots .seg.active { background: var(--gold); box-shadow: inset -2px -2px 0 var(--gold-deep), inset 2px 2px 0 rgba(255,255,255,0.3); animation: pulse-seg 1s infinite steps(2); }
+  @keyframes pulse-seg { 0%,100%{ opacity:1; } 50%{ opacity:0.55; } }
+  @media (prefers-reduced-motion: reduce) { .progress-dots .seg.active { animation: none; } }
+
+  /* Cards */
+  .panel {
+    background: var(--navy-panel);
+    padding: 26px 24px;
+    margin-bottom: 30px;
+  }
+  .eyebrow {
+    font-family: var(--font-title);
+    font-size: 0.62rem;
+    color: var(--cyan);
+    letter-spacing: 0.02em;
+    margin: 0 0 14px;
+    text-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+  }
+  h1 {
+    font-family: var(--font-title);
+    font-size: clamp(1rem, 4.4vw, 1.5rem);
+    line-height: 1.7;
+    margin: 0 0 18px;
+    color: var(--ink);
+    text-shadow: 3px 3px 0 rgba(0,0,0,0.5);
+  }
+  h2 {
+    font-family: var(--font-title);
+    font-size: clamp(0.85rem, 3.6vw, 1.1rem);
+    line-height: 1.7;
+    margin: 0 0 16px;
+    color: var(--gold);
+    text-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+  }
+  p { color: var(--ink-dim); margin: 0 0 14px; font-size: 1.15rem; }
+  .lede { font-size: 1.3rem; color: var(--ink); }
+
+  .btn {
+    font-family: var(--font-title);
+    font-size: 0.68rem;
+    line-height: 1.4;
+    border: 4px solid #000;
+    padding: 14px 20px;
+    cursor: pointer;
+    background: var(--gold);
+    color: #241300;
+    box-shadow: inset 2px 2px 0 rgba(255,255,255,0.35), inset -3px -3px 0 rgba(0,0,0,0.35), 5px 5px 0 0 #000;
+    transition: transform 0.05s steps(1), box-shadow 0.05s steps(1);
+  }
+  .btn:hover:not(:disabled) { filter: brightness(1.06); }
+  .btn:active:not(:disabled) {
+    transform: translate(4px, 4px);
+    box-shadow: inset 2px 2px 0 rgba(255,255,255,0.35), inset -3px -3px 0 rgba(0,0,0,0.35), 1px 1px 0 0 #000;
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.secondary {
+    background: var(--navy-mid);
+    color: var(--ink);
+  }
+  .btn.small { padding: 9px 14px; font-size: 0.6rem; }
+
+  .log {
+    border-left: 5px solid var(--cyan);
+    padding: 12px 16px;
+    background: rgba(77, 243, 255, 0.07);
+    font-size: 1.15rem;
+    color: var(--ink-dim);
+    margin-bottom: 20px;
+  }
+  .log strong { color: var(--cyan); }
+
+  /* Sequence puzzle */
+  .seq-pool, .seq-built {
+    display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;
+  }
+  .seq-item {
+    font-family: var(--font-body);
+    background: var(--navy-mid);
+    border: 3px solid #000;
+    box-shadow: inset -2px -2px 0 rgba(0,0,0,0.4), inset 2px 2px 0 rgba(255,255,255,0.06);
+    padding: 12px 14px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 1.15rem;
+  }
+  .seq-item:hover { border-color: var(--gold); }
+  .seq-item .num {
+    font-family: var(--font-title); font-size: 0.65rem; color: var(--gold); min-width: 22px;
+  }
+  .seq-built .seq-item { border-color: var(--cyan); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 620px) { .two-col { grid-template-columns: 1fr; } }
+  .col-label { font-family: var(--font-title); font-size: 0.55rem; color: var(--ink-dim); margin-bottom: 10px; line-height: 1.6; }
+
+  /* Binary module */
+  .byte-row { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
+  .byte {
+    font-family: var(--font-body);
+    background: var(--navy-mid);
+    border: 3px solid #000;
+    padding: 8px 12px;
+    font-size: 1.5rem;
+    letter-spacing: 0.1em;
+    color: var(--cyan);
+    box-shadow: inset -2px -2px 0 rgba(0,0,0,0.4);
+  }
+  .letter-input {
+    width: 54px; text-align: center;
+    font-family: var(--font-body);
+    font-size: 1.6rem;
+    background: var(--bg-black);
+    border: 3px solid #000;
+    color: var(--ink);
+    padding: 8px 6px;
+    box-shadow: inset 2px 2px 0 rgba(0,0,0,0.5);
+  }
+  .letter-input:focus { outline: 3px solid var(--gold); }
+  .ref-table {
+    font-family: var(--font-body); font-size: 1.05rem; color: var(--ink-dim);
+    background: rgba(0,0,0,0.3); padding: 12px 16px; margin-bottom: 16px;
+    border: 3px solid #000;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(110px,1fr)); gap: 4px 14px;
+  }
+
+  /* Diagnostic tree */
+  .diag-node {
+    background: var(--navy-mid); border: 3px solid #000;
+    box-shadow: inset -2px -2px 0 rgba(0,0,0,0.4);
+    padding: 16px 18px; margin-bottom: 12px;
+  }
+  .diag-question { font-family: var(--font-title); font-size: 0.75rem; line-height: 1.7; margin-bottom: 14px; color: var(--ink); }
+  .diag-choices { display: flex; gap: 10px; flex-wrap: wrap; }
+  .diag-history { font-family: var(--font-body); font-size: 1rem; color: var(--ink-dim); margin-bottom: 10px; }
+
+  /* Ethics scenario */
+  .choice-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+  .choice-card {
+    text-align: left;
+    background: var(--navy-mid); border: 3px solid #000;
+    box-shadow: inset -2px -2px 0 rgba(0,0,0,0.4);
+    padding: 14px 16px; cursor: pointer; color: var(--ink); font-family: var(--font-body); font-size: 1.15rem;
+  }
+  .choice-card:hover { border-color: var(--gold); }
+  .choice-card.correct { border-color: var(--green); background: rgba(77,255,160,0.12); }
+  .choice-card.wrong { border-color: var(--red); background: rgba(255,93,108,0.1); }
+
+  /* Network maze */
+  .grid-wrap { overflow-x: auto; padding-bottom: 6px; }
+  .maze {
+    display: grid; grid-template-columns: repeat(6, 52px); grid-auto-rows: 52px; gap: 5px;
+    margin: 0 auto 16px;
+    width: max-content;
+  }
+  .node {
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-title); font-size: 0.55rem; cursor: pointer;
+    background: var(--navy-mid); border: 3px solid #000; color: var(--ink-dim);
+  }
+  .node.blocked { background: rgba(255,93,108,0.15); border-color: var(--red); color: var(--red); cursor: not-allowed; }
+  .node.source { background: rgba(77,255,160,0.2); border-color: var(--green); color: var(--green); }
+  .node.dest { background: rgba(255,207,77,0.2); border-color: var(--gold); color: var(--gold); }
+  .node.path { background: rgba(77,243,255,0.25); border-color: var(--cyan); color: var(--cyan); }
+  .node.disabled { cursor: default; }
+
+  /* Hint */
+  .hint-toggle {
+    background: var(--bg-black); border: 3px dashed var(--gold-deep); color: var(--ink-dim);
+    font-family: var(--font-title); font-size: 0.55rem; padding: 10px 14px; cursor: pointer;
+  }
+  .hint-box {
+    margin-top: 10px; padding: 12px 14px; background: rgba(255,207,77,0.08);
+    border-left: 5px solid var(--gold); font-size: 1.1rem; color: var(--ink-dim);
+    display: none;
+  }
+  .hint-box.show { display: block; }
+
+  .feedback { font-family: var(--font-body); font-size: 1.15rem; margin-top: 10px; min-height: 22px; }
+  .feedback.ok { color: var(--green); }
+  .feedback.err { color: var(--red); }
+
+  .code-piece {
+    font-family: var(--font-title); font-size: 1.3rem; color: #241300;
+    background: var(--gold); border: 3px solid #000;
+    box-shadow: inset -2px -2px 0 var(--gold-deep);
+    padding: 8px 14px; display: inline-block;
+  }
+
+  .footer-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 10px; flex-wrap: wrap; }
+
+  .pace-note { font-family: var(--font-body); font-size: 1rem; color: var(--ink-dim); text-align: right; }
+
+  .final-code-input {
+    font-family: var(--font-title); font-size: 1.3rem; letter-spacing: 0.3em; text-align: center;
+    width: 100%; max-width: 260px; background: var(--bg-black); border: 4px solid var(--gold);
+    padding: 14px; color: var(--gold); margin-bottom: 14px;
+  }
+
+  .badge-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 18px 0; }
+  @media (max-width: 560px) { .badge-grid { grid-template-columns: repeat(2, 1fr); } }
+  .badge {
+    background: var(--navy-mid); border: 3px solid var(--green); box-shadow: inset -2px -2px 0 var(--green-deep);
+    padding: 12px 8px; text-align: center; font-family: var(--font-title); font-size: 0.55rem; line-height: 1.8; color: var(--green);
+  }
+
+  textarea.reflect {
+    width: 100%; min-height: 90px; background: var(--bg-black); border: 3px solid #000;
+    color: var(--ink); font-family: var(--font-body); font-size: 1.15rem; padding: 12px;
+    resize: vertical;
+  }
+
+  .blink { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 0%,49%{ opacity:1; } 50%,100%{ opacity:0; } }
+  @media (prefers-reduced-motion: reduce) { .blink { animation: none; } }
+
+  .hidden { display: none !important; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+  ::selection { background: var(--gold); color: #000; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="stars"></div>
+<div id="vignette"></div>
+<div id="scanlines"></div>
+<div class="app">
+
+  <div class="hud pixel-box">
+    <div class="hud-title"><span class="dot"></span> SIGNAL LOST</div>
+    <div class="progress-dots" id="progressDots"></div>
+    <div class="timer" id="timer">55:00</div>
+  </div>
+
+  <!-- SCREEN: INTRO -->
+  <section class="panel pixel-box" id="screen-intro">
+    <p class="eyebrow">&gt; INCOMING TRANSMISSION</p>
+    <h1>CONTACT WITH PROBE<br>KEPLER-9 IS LOST</h1>
+    <p class="lede">Six hours ago, deep-space probe <strong style="color:var(--gold)">KEPLER-9</strong> stopped responding. Your crew is on duty at Mission Control. Clear five systems to restore the signal &mdash; each one tests a different way computer scientists think.</p>
+    <div class="log">
+      <strong>HOW TO PLAY:</strong> Work through the five levels below in order, at your own pace. Each level drops a piece of the recovery code. Stuck? Every level has a hint button. Collect all five pieces, then enter the final code together to bring Kepler-9 back online.
+    </div>
+    <div class="two-col" style="margin-bottom:22px;">
+      <div>
+        <div class="col-label">MISSION LEVELS</div>
+        <p style="margin:0; color:var(--ink); font-size:1.15rem;">1. WAKE SEQUENCE &mdash; algorithms<br>2. DECODE &mdash; binary data<br>3. DIAGNOSE &mdash; computing systems<br>4. TRANSMIT &mdash; digital citizenship<br>5. ROUTE &mdash; networks</p>
+      </div>
+      <div>
+        <div class="col-label">SUGGESTED PACE</div>
+        <p style="margin:0; color:var(--ink); font-size:1.15rem;">~9 minutes per level.<br>The mission clock at the top runs the whole time &mdash; keep your crew moving.</p>
+      </div>
+    </div>
+    <button class="btn blink" onclick="playBlip('start'); startMission()">&gt; PRESS START</button>
+  </section>
+
+  <!-- SCREEN: MODULE 1 - SEQUENCING -->
+  <section class="panel pixel-box hidden" id="screen-m1">
+    <p class="eyebrow">LEVEL 1 / 5 &mdash; ALGORITHMS</p>
+    <h2>WAKE SEQUENCE</h2>
+    <div class="log">A probe can't just "turn on." Every startup follows an <strong>algorithm</strong>: a precise, ordered set of steps. Do them out of order and systems fail. Click each step below, in the order Kepler-9 should wake up.</div>
+    <div class="two-col">
+      <div>
+        <div class="col-label">AVAILABLE STEPS (CLICK TO ADD)</div>
+        <div class="seq-pool" id="seqPool"></div>
+      </div>
+      <div>
+        <div class="col-label">YOUR SEQUENCE</div>
+        <div class="seq-built" id="seqBuilt"></div>
+        <button class="btn secondary small" onclick="playBlip('click'); resetSeq()">CLEAR</button>
+      </div>
+    </div>
+    <div class="feedback" id="m1Feedback"></div>
+    <button class="hint-toggle" onclick="toggleHint('m1')">? HINT</button>
+    <div class="hint-box" id="hint-m1">
+      Think about dependencies: what has to be true before the next step can work? You can't calibrate a sensor with no power, and you can't call home before you know your instruments are working.
+    </div>
+    <div class="reflect-block" id="reflectBlock-m1" style="display:none;">
+      <div class="col-label" style="margin-top:16px;">MISSION LOG &mdash; REQUIRED BEFORE LAUNCH</div>
+      <p style="margin:0 0 8px;">Why does the order matter here? Give one reason a step would fail if it happened too early.</p>
+      <textarea class="reflect" id="reflect-m1" rows="2" placeholder="Type a sentence or two..."></textarea>
+    </div>
+    <div class="footer-nav">
+      <span></span>
+      <button class="btn" id="m1Next" disabled onclick="playBlip('confirm'); goTo('m2')">LOCK IN &amp; CONTINUE</button>
+    </div>
+  </section>
+
+  <!-- SCREEN: MODULE 2 - BINARY -->
+  <section class="panel pixel-box hidden" id="screen-m2">
+    <p class="eyebrow">LEVEL 2 / 5 &mdash; DATA &amp; BINARY</p>
+    <h2>DECODE</h2>
+    <div class="log">Computers store every letter as a number, and every number as <strong>binary</strong> (1s and 0s). Kepler-9 sent its status as four binary bytes. Use the reference chart to convert each byte to a letter, then type the word it spells.</div>
+    <div class="ref-table" id="refTable"></div>
+    <div class="byte-row" id="byteRow"></div>
+    <div style="margin-top:14px;">
+      <label class="col-label" for="m2answer">TYPE THE DECODED WORD</label><br>
+      <input type="text" id="m2answer" class="letter-input" style="width:220px; text-transform:uppercase;" maxlength="10" autocomplete="off">
+      <button class="btn small" onclick="checkM2()">CHECK</button>
+    </div>
+    <div class="feedback" id="m2Feedback"></div>
+    <button class="hint-toggle" onclick="toggleHint('m2')">? HINT</button>
+    <div class="hint-box" id="hint-m2">
+      Binary place values from left to right are 128, 64, 32, 16, 8, 4, 2, 1. Add up the place values wherever there's a 1. That total is the letter's position code &mdash; match it on the chart.
+    </div>
+    <div class="reflect-block" id="reflectBlock-m2" style="display:none;">
+      <div class="col-label" style="margin-top:16px;">MISSION LOG &mdash; REQUIRED BEFORE LAUNCH</div>
+      <p style="margin:0 0 8px;">If just one bit in one byte had flipped, what would have happened to the decoded word?</p>
+      <textarea class="reflect" id="reflect-m2" rows="2" placeholder="Type a sentence or two..."></textarea>
+    </div>
+    <div class="footer-nav">
+      <span></span>
+      <button class="btn" id="m2Next" disabled onclick="playBlip('confirm'); goTo('m3')">CONTINUE</button>
+    </div>
+  </section>
+
+  <!-- SCREEN: MODULE 3 - DIAGNOSTIC TREE -->
+  <section class="panel pixel-box hidden" id="screen-m3">
+    <p class="eyebrow">LEVEL 3 / 5 &mdash; COMPUTING SYSTEMS</p>
+    <h2>DIAGNOSE</h2>
+    <div class="log">Kepler-9's camera isn't sending images. Every computing system is a chain of hardware and software parts working together &mdash; when one breaks, the whole chain stops. Follow the diagnostic questions to find the real cause.</div>
+    <div class="diag-history" id="diagHistory"></div>
+    <div id="diagStage"></div>
+    <div class="feedback" id="m3Feedback"></div>
+    <button class="hint-toggle" onclick="toggleHint('m3')">? HINT</button>
+    <div class="hint-box" id="hint-m3">
+      Diagnosis works from the outside in: check power first, then the connection between parts, then the part itself. Ruling things out is how you find the real cause.
+    </div>
+    <div class="reflect-block" id="reflectBlock-m3" style="display:none;">
+      <div class="col-label" style="margin-top:16px;">MISSION LOG &mdash; REQUIRED BEFORE LAUNCH</div>
+      <p style="margin:0 0 8px;">How did ruling out possibilities help you land on the real cause?</p>
+      <textarea class="reflect" id="reflect-m3" rows="2" placeholder="Type a sentence or two..."></textarea>
+    </div>
+    <div class="footer-nav">
+      <span></span>
+      <button class="btn" id="m3Next" disabled onclick="playBlip('confirm'); goTo('m4')">CONTINUE</button>
+    </div>
+  </section>
+
+  <!-- SCREEN: MODULE 4 - ETHICS -->
+  <section class="panel pixel-box hidden" id="screen-m4">
+    <p class="eyebrow">LEVEL 4 / 5 &mdash; DIGITAL CITIZENSHIP</p>
+    <h2>TRANSMIT</h2>
+    <div class="log">A partner space agency in another country is asking mission control to send them Kepler-9's raw sensor data right now, before it's been checked for errors. What should your team do?</div>
+    <div class="choice-list" id="choiceList"></div>
+    <div class="feedback" id="m4Feedback"></div>
+    <button class="hint-toggle" onclick="toggleHint('m4')">? HINT</button>
+    <div class="hint-box" id="hint-m4">
+      Good digital citizenship isn't about refusing to share &mdash; it's about sharing responsibly: verify data, give credit, and communicate clearly about what's known versus unconfirmed.
+    </div>
+    <div class="reflect-block" id="reflectBlock-m4" style="display:none;">
+      <div class="col-label" style="margin-top:16px;">MISSION LOG &mdash; REQUIRED BEFORE LAUNCH</div>
+      <p style="margin:0 0 8px;">Describe a real situation (school, gaming, social media) where sharing something "as-is" could cause a problem.</p>
+      <textarea class="reflect" id="reflect-m4" rows="2" placeholder="Type a sentence or two..."></textarea>
+    </div>
+    <div class="footer-nav">
+      <span></span>
+      <button class="btn" id="m4Next" disabled onclick="playBlip('confirm'); goTo('m5')">CONTINUE</button>
+    </div>
+  </section>
+
+  <!-- SCREEN: MODULE 5 - NETWORK MAZE -->
+  <section class="panel pixel-box hidden" id="screen-m5">
+    <p class="eyebrow">LEVEL 5 / 5 &mdash; NETWORKS</p>
+    <h2>ROUTE</h2>
+    <div class="log">Data doesn't travel in a straight line &mdash; it hops from node to node until it reaches its destination, avoiding failed connections along the way. Click connected nodes to route the packet from <strong>SRC</strong> to <strong>DST</strong>, avoiding blocked (red) nodes. You can only move up, down, left, or right.</div>
+    <div class="grid-wrap"><div class="maze" id="maze"></div></div>
+    <div class="footer-nav" style="margin-bottom:6px;">
+      <button class="btn secondary small" onclick="playBlip('click'); resetMaze()">RESET PATH</button>
+      <span class="feedback" id="m5Feedback"></span>
+    </div>
+    <button class="hint-toggle" onclick="toggleHint('m5')">? HINT</button>
+    <div class="hint-box" id="hint-m5">
+      There's more than one working path. If you get stuck, back up a step (click the last node you placed again to remove it) rather than starting completely over.
+    </div>
+    <div class="reflect-block" id="reflectBlock-m5" style="display:none;">
+      <div class="col-label" style="margin-top:16px;">MISSION LOG &mdash; REQUIRED BEFORE LAUNCH</div>
+      <p style="margin:0 0 8px;">Why is it useful for a network to have more than one possible path between two points?</p>
+      <textarea class="reflect" id="reflect-m5" rows="2" placeholder="Type a sentence or two..."></textarea>
+    </div>
+    <div class="footer-nav">
+      <span></span>
+      <button class="btn" id="m5Next" disabled onclick="playBlip('confirm'); goTo('final')">CONTINUE</button>
+    </div>
+  </section>
+
+  <!-- SCREEN: FINAL CODE -->
+  <section class="panel pixel-box hidden" id="screen-final">
+    <p class="eyebrow">&gt; ALL SYSTEMS CLEARED</p>
+    <h2>RESTORE THE SIGNAL</h2>
+    <p>Combine your five recovery pieces into the final code, in the order you earned them, then transmit it to bring Kepler-9 back online.</p>
+    <div id="codePieces" style="margin-bottom:18px; display:flex; gap:10px; flex-wrap:wrap;"></div>
+    <input type="text" id="finalCodeInput" class="final-code-input" placeholder="-----" maxlength="5" autocomplete="off">
+    <div>
+      <button class="btn" onclick="checkFinalCode()">&gt; TRANSMIT CODE</button>
+    </div>
+    <div class="feedback" id="finalFeedback"></div>
+  </section>
+
+  <!-- SCREEN: DEBRIEF -->
+  <section class="panel pixel-box hidden" id="screen-debrief">
+    <p class="eyebrow">&gt; SIGNAL RESTORED</p>
+    <h1>KEPLER-9<br>IS BACK ONLINE</h1>
+    <p class="lede">Your team just used five core ideas from computer science &mdash; the same ones real engineers use every day.</p>
+    <div class="badge-grid">
+      <div class="badge">ALGORITHMS<br>CLEARED</div>
+      <div class="badge">BINARY DATA<br>CLEARED</div>
+      <div class="badge">SYSTEMS<br>CLEARED</div>
+      <div class="badge">DIGITAL CIV<br>CLEARED</div>
+      <div class="badge">NETWORKS<br>CLEARED</div>
+    </div>
+    <h2 style="font-size:0.85rem;">MISSION LOG</h2>
+    <p>Before you sign off: which system felt most familiar, and which one surprised you? Jot a few sentences below.</p>
+    <textarea class="reflect" id="reflection" placeholder="Type your mission log entry here..."></textarea>
+    <p class="pace-note" style="margin-top:10px;">Time remaining when signal was restored: <span id="finalTime"></span></p>
+    <div style="margin-top:20px; text-align:center;">
+      <button class="btn secondary" onclick="playBlip('confirm'); initBonus(); goTo('bonus')">&gt; BONUS OPS: DEEP SPACE</button>
+      <p style="font-size:0.95rem; margin-top:10px;">Optional extra transmissions for crews with mission time left.</p>
+    </div>
+  </section>
+
+  <!-- SCREEN: BONUS -->
+  <section class="panel pixel-box hidden" id="screen-bonus">
+    <p class="eyebrow">&gt; BONUS OPS &mdash; NOT REQUIRED</p>
+    <h2>DEEP SPACE TRANSMISSIONS</h2>
+    <p class="lede">Kepler-9 has more to say. These two transmissions are tougher &mdash; take them on if your crew still has time on the clock.</p>
+
+    <h2 style="font-size:0.8rem; margin-top:26px;">BONUS 1 &mdash; LONG-RANGE DECODE</h2>
+    <div class="log">A longer status word just came in as six binary bytes. Decode it the same way as before.</div>
+    <div class="ref-table" id="bonusRefTable"></div>
+    <div class="byte-row" id="bonusByteRow"></div>
+    <div style="margin-top:14px;">
+      <label class="col-label" for="bonusAnswer">TYPE THE DECODED WORD</label><br>
+      <input type="text" id="bonusAnswer" class="letter-input" style="width:260px; text-transform:uppercase;" maxlength="12" autocomplete="off">
+      <button class="btn small" onclick="checkBonusWord()">CHECK</button>
+    </div>
+    <div class="feedback" id="bonusWordFeedback"></div>
+
+    <h2 style="font-size:0.8rem; margin-top:30px;">BONUS 2 &mdash; DEEP RELAY ROUTE</h2>
+    <div class="log">A bigger, trickier relay network needs routing. Same rules: click connected nodes, up/down/left/right only, avoid red.</div>
+    <div class="grid-wrap"><div class="maze" id="bonusMaze"></div></div>
+    <div class="footer-nav" style="margin-bottom:6px;">
+      <button class="btn secondary small" onclick="playBlip('click'); initBonusMaze()">RESET PATH</button>
+      <span class="feedback" id="bonusMazeFeedback"></span>
+    </div>
+
+    <div class="footer-nav" style="margin-top:26px;">
+      <span></span>
+      <button class="btn" onclick="playBlip('win'); goTo('debrief')">&gt; RETURN TO MISSION LOG</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* ---------- AUDIO (simple 8-bit blips, no external assets) ---------- */
+let audioCtx = null;
+function ensureAudio(){
+  if (!audioCtx){
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e){ audioCtx = null; }
+  }
+  return audioCtx;
+}
+function playBlip(kind){
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const patterns = {
+    start:   [[220,0.08],[440,0.1],[660,0.12]],
+    click:   [[500,0.05]],
+    confirm: [[440,0.06],[660,0.08]],
+    ok:      [[523,0.07],[659,0.07],[784,0.12]],
+    err:     [[180,0.1],[140,0.15]],
+    win:     [[523,0.08],[659,0.08],[784,0.08],[1047,0.2]]
+  };
+  const seq = patterns[kind] || patterns.click;
+  let t = now;
+  seq.forEach(([freq,dur])=>{
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.06, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t+dur);
+    t += dur;
+  });
+}
+
+/* ---------- STATE / NAV ---------- */
+const order = ['intro','m1','m2','m3','m4','m5','final','debrief'];
+const moduleScreens = ['m1','m2','m3','m4','m5'];
+let current = 'intro';
+let timerSeconds = 55*60;
+let timerHandle = null;
+const earnedPieces = {}; // moduleId -> {value, label}
+
+function renderDots(){
+  const wrap = document.getElementById('progressDots');
+  wrap.innerHTML = '';
+  moduleScreens.forEach(id=>{
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    if (earnedPieces[id]) seg.classList.add('done');
+    else if (id === current) seg.classList.add('active');
+    wrap.appendChild(seg);
+  });
+}
+
+function goTo(id){
+  document.getElementById('screen-'+current).classList.add('hidden');
+  current = id;
+  document.getElementById('screen-'+id).classList.remove('hidden');
+  renderDots();
+  window.scrollTo({top:0, behavior:'smooth'});
+  if (id === 'final') renderFinalScreen();
+  if (id === 'debrief') document.getElementById('finalTime').textContent = formatTime(timerSeconds);
+}
+
+function startMission(){
+  goTo('m1');
+  if (!timerHandle){
+    timerHandle = setInterval(()=>{
+      if (timerSeconds > 0){
+        timerSeconds--;
+        document.getElementById('timer').textContent = formatTime(timerSeconds);
+        if (timerSeconds === 0){
+          document.getElementById('timer').style.color = 'var(--red)';
+        }
+      }
+    }, 1000);
+  }
+}
+function formatTime(s){
+  const m = Math.floor(s/60), sec = s%60;
+  return String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+}
+
+function toggleHint(id){
+  playBlip('click');
+  document.getElementById('hint-'+id).classList.toggle('show');
+}
+
+/* ---------- REFLECTION GATES ---------- */
+const REFLECT_MIN_LEN = 12;
+function armReflection(moduleId){
+  const block = document.getElementById('reflectBlock-'+moduleId);
+  const ta = document.getElementById('reflect-'+moduleId);
+  const nextBtn = document.getElementById(moduleId+'Next');
+  if (!block || !ta || !nextBtn) return;
+  block.style.display = 'block';
+  nextBtn.disabled = true;
+  ta.oninput = ()=>{
+    nextBtn.disabled = ta.value.trim().length < REFLECT_MIN_LEN;
+  };
+}
+function resetReflection(moduleId){
+  const block = document.getElementById('reflectBlock-'+moduleId);
+  const ta = document.getElementById('reflect-'+moduleId);
+  if (block) block.style.display = 'none';
+  if (ta) ta.value = '';
+}
+
+/* ---------- MODULE 1: SEQUENCING ---------- */
+const seqSteps = [
+  {id:'power', label:'Power on the main reactor', order:1},
+  {id:'diag', label:'Run full diagnostic check', order:2},
+  {id:'sensors', label:'Calibrate navigation sensors', order:3},
+  {id:'comm', label:'Establish communication link', order:4},
+  {id:'thrust', label:'Activate thrusters', order:5},
+];
+let seqPoolState = [];
+let seqBuiltState = [];
+
+function initSeq(){
+  seqPoolState = [...seqSteps].sort(()=>Math.random()-0.5);
+  seqBuiltState = [];
+  renderSeq();
+}
+function renderSeq(){
+  const pool = document.getElementById('seqPool');
+  const built = document.getElementById('seqBuilt');
+  pool.innerHTML = '';
+  seqPoolState.forEach(step=>{
+    const div = document.createElement('div');
+    div.className = 'seq-item';
+    div.innerHTML = `<span>${step.label}</span>`;
+    div.onclick = ()=>{
+      playBlip('click');
+      seqPoolState = seqPoolState.filter(s=>s.id!==step.id);
+      seqBuiltState.push(step);
+      renderSeq();
+    };
+    pool.appendChild(div);
+  });
+  built.innerHTML = '';
+  seqBuiltState.forEach((step,i)=>{
+    const div = document.createElement('div');
+    div.className = 'seq-item';
+    div.innerHTML = `<span class="num">${i+1}</span><span>${step.label}</span>`;
+    div.title = 'Click to remove';
+    div.onclick = ()=>{
+      playBlip('click');
+      seqBuiltState = seqBuiltState.filter(s=>s.id!==step.id);
+      seqPoolState.push(step);
+      renderSeq();
+    };
+    built.appendChild(div);
+  });
+  const fb = document.getElementById('m1Feedback');
+  const nextBtn = document.getElementById('m1Next');
+  if (seqBuiltState.length === seqSteps.length){
+    const correct = seqBuiltState.every((s,i)=>s.order === i+1);
+    if (correct){
+      fb.textContent = 'SEQUENCE VERIFIED. Recovery piece earned: K';
+      fb.className = 'feedback ok';
+      earnedPieces['m1'] = 'K';
+      renderDots();
+      playBlip('ok');
+      armReflection('m1');
+    } else {
+      fb.textContent = 'SYSTEM FAULT. Check the hint and try reordering.';
+      fb.className = 'feedback err';
+      nextBtn.disabled = true;
+      playBlip('err');
+    }
+  } else {
+    fb.textContent = '';
+    nextBtn.disabled = true;
+  }
+}
+function resetSeq(){ initSeq(); document.getElementById('m1Feedback').textContent=''; document.getElementById('m1Next').disabled = true; resetReflection('m1'); }
+
+/* ---------- MODULE 2: BINARY ---------- */
+const m2Word = 'STAR';
+const m2Bytes = ['01010011','01010100','01000001','01010010'];
+function initM2(){
+  const ref = document.getElementById('refTable');
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  ref.innerHTML = letters.split('').map((l,i)=>`<span>${l} = ${65+i}</span>`).join('');
+  const row = document.getElementById('byteRow');
+  row.innerHTML = m2Bytes.map(b=>`<span class="byte">${b}</span>`).join('');
+  document.getElementById('m2answer').value = '';
+  document.getElementById('m2Feedback').textContent = '';
+  document.getElementById('m2Next').disabled = true;
+  resetReflection('m2');
+}
+function checkM2(){
+  playBlip('click');
+  const val = document.getElementById('m2answer').value.trim().toUpperCase();
+  const fb = document.getElementById('m2Feedback');
+  if (val === m2Word){
+    fb.textContent = 'DECODED CORRECTLY. Recovery piece earned: E';
+    fb.className = 'feedback ok';
+    earnedPieces['m2'] = 'E';
+    renderDots();
+    playBlip('ok');
+    armReflection('m2');
+  } else {
+    fb.textContent = 'NOT QUITE \u2014 recheck your binary-to-decimal conversion for each byte.';
+    fb.className = 'feedback err';
+    playBlip('err');
+  }
+}
+
+/* ---------- MODULE 3: DIAGNOSTIC TREE ---------- */
+const diagTree = {
+  start: {
+    q: 'Is the camera\u2019s power indicator light on?',
+    choices: [
+      {label:'No', next:'power_off'},
+      {label:'Yes', next:'q2'}
+    ]
+  },
+  power_off: { result:true, cause:'POWER SUPPLY FAILURE', explain:'No light means the camera isn\u2019t receiving power at all \u2014 the issue is upstream in the power system, not the camera itself.' },
+  q2: {
+    q: 'Does the system log show the camera connecting to the main computer?',
+    choices: [
+      {label:'No', next:'connect_fail'},
+      {label:'Yes', next:'q3'}
+    ]
+  },
+  connect_fail: { result:true, cause:'BROKEN DATA CONNECTION', explain:'Power is fine, but the camera and main computer aren\u2019t talking \u2014 a classic connection/interface failure.' },
+  q3: {
+    q: 'Is the memory card full?',
+    choices: [
+      {label:'Yes', next:'mem_full'},
+      {label:'No', next:'other'}
+    ]
+  },
+  mem_full: { result:true, cause:'STORAGE FULL', explain:'Power and connection are fine, but there\u2019s nowhere left to save new images \u2014 a full storage device stops the whole process.' },
+  other: { result:true, cause:'SOFTWARE GLITCH', explain:'Power, connection, and storage all check out \u2014 by elimination, the issue is in the camera\u2019s control software, which needs a restart.' }
+};
+let diagCurrent = 'start';
+let diagPath = [];
+function initM3(){
+  diagCurrent = 'start';
+  diagPath = [];
+  document.getElementById('m3Feedback').textContent = '';
+  document.getElementById('m3Next').disabled = true;
+  resetReflection('m3');
+  renderDiag();
+}
+function renderDiag(){
+  const node = diagTree[diagCurrent];
+  const stage = document.getElementById('diagStage');
+  const hist = document.getElementById('diagHistory');
+  hist.innerHTML = diagPath.length ? ('PATH: ' + diagPath.join(' \u2192 ')) : '';
+  if (node.result){
+    stage.innerHTML = `<div class="diag-node"><div class="diag-question">DIAGNOSIS: <span style="color:var(--gold)">${node.cause}</span></div><p style="margin:0;">${node.explain}</p></div>`;
+    document.getElementById('m3Feedback').textContent = 'ROOT CAUSE CONFIRMED. Recovery piece earned: P';
+    document.getElementById('m3Feedback').className = 'feedback ok';
+    earnedPieces['m3'] = 'P';
+    renderDots();
+    playBlip('ok');
+    armReflection('m3');
+  } else {
+    stage.innerHTML = `<div class="diag-node"><div class="diag-question">${node.q}</div><div class="diag-choices" id="diagChoices"></div></div>`;
+    const choicesWrap = document.getElementById('diagChoices');
+    node.choices.forEach(c=>{
+      const b = document.createElement('button');
+      b.className = 'btn secondary small';
+      b.textContent = c.label.toUpperCase();
+      b.onclick = ()=>{
+        playBlip('click');
+        diagPath.push(node.q.split(' ')[0] + '...' + c.label);
+        diagCurrent = c.next;
+        renderDiag();
+      };
+      choicesWrap.appendChild(b);
+    });
+  }
+}
+
+/* ---------- MODULE 4: ETHICS ---------- */
+const m4Choices = [
+  {label:'Send the raw data immediately \u2014 collaboration means sharing everything, fast.', correct:false},
+  {label:'Refuse to share any data with outside agencies, to keep it fully controlled.', correct:false},
+  {label:'Flag the data as unverified, share it with that label, and follow up once it\u2019s been checked.', correct:true},
+  {label:'Share it only after changing the numbers slightly so no one can tell where it came from.', correct:false},
+];
+function initM4(){
+  const wrap = document.getElementById('choiceList');
+  wrap.innerHTML = '';
+  document.getElementById('m4Feedback').textContent = '';
+  document.getElementById('m4Next').disabled = true;
+  resetReflection('m4');
+  m4Choices.forEach(c=>{
+    const div = document.createElement('div');
+    div.className = 'choice-card';
+    div.textContent = c.label;
+    div.onclick = ()=>{
+      const fb = document.getElementById('m4Feedback');
+      document.querySelectorAll('.choice-card').forEach(el=>el.classList.remove('correct','wrong'));
+      if (c.correct){
+        div.classList.add('correct');
+        fb.textContent = 'RIGHT \u2014 responsible data sharing means being clear about what\u2019s verified. Recovery piece earned: R';
+        fb.className = 'feedback ok';
+        earnedPieces['m4'] = 'R';
+        renderDots();
+        playBlip('ok');
+        armReflection('m4');
+      } else {
+        div.classList.add('wrong');
+        fb.textContent = 'That has a downside for trust or accuracy. Check the hint and try another option.';
+        fb.className = 'feedback err';
+        playBlip('err');
+      }
+    };
+    wrap.appendChild(div);
+  });
+}
+
+/* ---------- MODULE 5: NETWORK MAZE ---------- */
+const mazeLayout = [
+  [0,0,1,0,0,0],
+  [0,1,0,0,1,0],
+  [0,1,0,1,0,0],
+  [0,0,0,1,0,1],
+  [1,1,0,0,0,0],
+];
+const mazeSource = {r:0,c:0};
+const mazeDest = {r:4,c:5};
+let mazePath = [mazeSource];
+
+function initMaze(){
+  mazePath = [{...mazeSource}];
+  document.getElementById('m5Feedback').textContent = '';
+  document.getElementById('m5Next').disabled = true;
+  resetReflection('m5');
+  renderMaze();
+}
+function resetMaze(){ initMaze(); }
+function renderMaze(){
+  const wrap = document.getElementById('maze');
+  wrap.innerHTML = '';
+  for (let r=0;r<mazeLayout.length;r++){
+    for (let c=0;c<mazeLayout[0].length;c++){
+      const div = document.createElement('div');
+      const isSource = r===mazeSource.r && c===mazeSource.c;
+      const isDest = r===mazeDest.r && c===mazeDest.c;
+      const inPath = mazePath.some(p=>p.r===r && p.c===c);
+      let cls = 'node';
+      let label = '';
+      if (mazeLayout[r][c]===1){ cls += ' blocked'; label='X'; }
+      if (isSource){ cls += ' source'; label='SRC'; }
+      if (isDest){ cls += ' dest'; label='DST'; }
+      if (inPath && !isSource && !isDest){ cls += ' path'; label='*'; }
+      div.className = cls;
+      div.textContent = label;
+      if (mazeLayout[r][c]!==1){
+        div.onclick = ()=>handleMazeClick(r,c);
+      } else {
+        div.classList.add('disabled');
+      }
+      wrap.appendChild(div);
+    }
+  }
+}
+function handleMazeClick(r,c){
+  const last = mazePath[mazePath.length-1];
+  const already = mazePath.findIndex(p=>p.r===r && p.c===c);
+  if (already === mazePath.length-2){
+    mazePath.pop();
+    playBlip('click');
+    renderMaze();
+    return;
+  }
+  const isAdjacent = Math.abs(last.r-r)+Math.abs(last.c-c) === 1;
+  if (!isAdjacent || already !== -1) return;
+  mazePath.push({r,c});
+  playBlip('click');
+  renderMaze();
+  if (r===mazeDest.r && c===mazeDest.c){
+    document.getElementById('m5Feedback').textContent = 'PACKET DELIVERED! Recovery piece earned: Y';
+    document.getElementById('m5Feedback').className = 'feedback ok';
+    earnedPieces['m5'] = 'Y';
+    renderDots();
+    playBlip('ok');
+    armReflection('m5');
+  }
+}
+
+/* ---------- FINAL ---------- */
+function renderFinalScreen(){
+  const wrap = document.getElementById('codePieces');
+  wrap.innerHTML = moduleScreens.map(id=>`<span class="code-piece">${earnedPieces[id] || '?'}</span>`).join('');
+}
+function checkFinalCode(){
+  playBlip('click');
+  const val = document.getElementById('finalCodeInput').value.trim().toUpperCase();
+  const target = moduleScreens.map(id=>earnedPieces[id]).join('');
+  const fb = document.getElementById('finalFeedback');
+  if (val === target){
+    fb.textContent = 'SIGNAL RESTORED. Great work, flight team.';
+    fb.className = 'feedback ok';
+    playBlip('win');
+    setTimeout(()=>goTo('debrief'), 1100);
+  } else {
+    fb.textContent = 'NOT A MATCH. Double-check the order of your recovery pieces above.';
+    fb.className = 'feedback err';
+    playBlip('err');
+  }
+}
+
+/* ---------- BONUS ROUND ---------- */
+// GALAXY -> G=01000111 A=01000001 L=01001100 A=01000001 X=01011000 Y=01011001
+const bonusWord = 'GALAXY';
+const bonusBytes = ['01000111','01000001','01001100','01000001','01011000','01011001'];
+function initBonus(){
+  const ref = document.getElementById('bonusRefTable');
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  ref.innerHTML = letters.split('').map((l,i)=>`<span>${l} = ${65+i}</span>`).join('');
+  const row = document.getElementById('bonusByteRow');
+  row.innerHTML = bonusBytes.map(b=>`<span class="byte">${b}</span>`).join('');
+  document.getElementById('bonusAnswer').value = '';
+  document.getElementById('bonusWordFeedback').textContent = '';
+  initBonusMaze();
+}
+function checkBonusWord(){
+  playBlip('click');
+  const val = document.getElementById('bonusAnswer').value.trim().toUpperCase();
+  const fb = document.getElementById('bonusWordFeedback');
+  if (val === bonusWord){
+    fb.textContent = 'DECODED CORRECTLY. Deep-space transmission received.';
+    fb.className = 'feedback ok';
+    playBlip('ok');
+  } else {
+    fb.textContent = 'NOT QUITE \u2014 recheck each byte against the chart.';
+    fb.className = 'feedback err';
+    playBlip('err');
+  }
+}
+
+const bonusMazeLayout = [
+  [0,0,1,0,0,0,0],
+  [0,1,0,0,1,1,0],
+  [0,1,0,1,0,0,0],
+  [0,0,0,1,0,1,0],
+  [1,1,0,0,0,1,0],
+  [0,0,0,1,0,0,0],
+];
+const bonusMazeSource = {r:0,c:0};
+const bonusMazeDest = {r:5,c:6};
+let bonusMazePath = [bonusMazeSource];
+function initBonusMaze(){
+  bonusMazePath = [{...bonusMazeSource}];
+  document.getElementById('bonusMazeFeedback').textContent = '';
+  renderBonusMaze();
+}
+function renderBonusMaze(){
+  const wrap = document.getElementById('bonusMaze');
+  wrap.innerHTML = '';
+  wrap.style.gridTemplateColumns = `repeat(${bonusMazeLayout[0].length}, 46px)`;
+  for (let r=0;r<bonusMazeLayout.length;r++){
+    for (let c=0;c<bonusMazeLayout[0].length;c++){
+      const div = document.createElement('div');
+      const isSource = r===bonusMazeSource.r && c===bonusMazeSource.c;
+      const isDest = r===bonusMazeDest.r && c===bonusMazeDest.c;
+      const inPath = bonusMazePath.some(p=>p.r===r && p.c===c);
+      let cls = 'node';
+      let label = '';
+      if (bonusMazeLayout[r][c]===1){ cls += ' blocked'; label='X'; }
+      if (isSource){ cls += ' source'; label='SRC'; }
+      if (isDest){ cls += ' dest'; label='DST'; }
+      if (inPath && !isSource && !isDest){ cls += ' path'; label='*'; }
+      div.className = cls;
+      div.textContent = label;
+      if (bonusMazeLayout[r][c]!==1){
+        div.onclick = ()=>handleBonusMazeClick(r,c);
+      } else {
+        div.classList.add('disabled');
+      }
+      wrap.appendChild(div);
+    }
+  }
+}
+function handleBonusMazeClick(r,c){
+  const last = bonusMazePath[bonusMazePath.length-1];
+  const already = bonusMazePath.findIndex(p=>p.r===r && p.c===c);
+  if (already === bonusMazePath.length-2){
+    bonusMazePath.pop();
+    playBlip('click');
+    renderBonusMaze();
+    return;
+  }
+  const isAdjacent = Math.abs(last.r-r)+Math.abs(last.c-c) === 1;
+  if (!isAdjacent || already !== -1) return;
+  bonusMazePath.push({r,c});
+  playBlip('click');
+  renderBonusMaze();
+  if (r===bonusMazeDest.r && c===bonusMazeDest.c){
+    document.getElementById('bonusMazeFeedback').textContent = 'DEEP RELAY ROUTED. Nice work, crew.';
+    document.getElementById('bonusMazeFeedback').className = 'feedback ok';
+    playBlip('win');
+  }
+}
+
+/* ---------- INIT ---------- */
+initSeq();
+initM2();
+initM3();
+initM4();
+initMaze();
+renderDots();
+document.getElementById('timer').textContent = formatTime(timerSeconds);
+</script>
+</body>
+</html>
