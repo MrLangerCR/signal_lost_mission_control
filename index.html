@@ -205,6 +205,7 @@
     color: #241300;
     box-shadow: inset 2px 2px 0 rgba(255,255,255,0.35), inset -3px -3px 0 rgba(0,0,0,0.35), 5px 5px 0 0 #000;
     transition: transform 0.05s steps(1), box-shadow 0.05s steps(1);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
   .btn:hover:not(:disabled) { filter: brightness(1.06); }
   .btn:active:not(:disabled) {
@@ -304,9 +305,9 @@
   .choice-card.wrong { border-color: var(--red); background: rgba(255,93,108,0.1); }
 
   /* Network maze */
-  .grid-wrap { overflow-x: auto; padding-bottom: 6px; }
+  .grid-wrap { overflow-x: auto; padding-bottom: 6px; touch-action: pan-x; }
   .maze {
-    display: grid; grid-template-columns: repeat(6, 52px); grid-auto-rows: 52px; gap: 5px;
+    display: grid; grid-template-columns: repeat(6, 58px); grid-auto-rows: 58px; gap: 7px;
     margin: 0 auto 16px;
     width: max-content;
   }
@@ -314,12 +315,17 @@
     display: flex; align-items: center; justify-content: center;
     font-family: var(--font-title); font-size: 0.55rem; cursor: pointer;
     background: var(--navy-mid); border: 3px solid #000; color: var(--ink-dim);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    min-width: 44px; min-height: 44px;
   }
   .node.blocked { background: rgba(255,93,108,0.15); border-color: var(--red); color: var(--red); cursor: not-allowed; }
   .node.source { background: rgba(77,255,160,0.2); border-color: var(--green); color: var(--green); }
   .node.dest { background: rgba(255,207,77,0.2); border-color: var(--gold); color: var(--gold); }
   .node.path { background: rgba(77,243,255,0.25); border-color: var(--cyan); color: var(--cyan); }
   .node.disabled { cursor: default; }
+  .node.reachable { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold), 0 0 10px var(--gold); animation: reach-pulse 1s infinite steps(2); }
+  @keyframes reach-pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.6; } }
+  @media (prefers-reduced-motion: reduce) { .node.reachable { animation: none; } }
 
   /* Hint */
   .hint-toggle {
@@ -523,7 +529,7 @@
   <section class="panel pixel-box hidden" id="screen-m5">
     <p class="eyebrow">LEVEL 5 / 5 &mdash; NETWORKS</p>
     <h2>ROUTE</h2>
-    <div class="log">Data doesn't travel in a straight line &mdash; it hops from node to node until it reaches its destination, avoiding failed connections along the way. Click connected nodes to route the packet from <strong>SRC</strong> to <strong>DST</strong>, avoiding blocked (red) nodes. You can only move up, down, left, or right.</div>
+    <div class="log">Data doesn't travel in a straight line &mdash; it hops from node to node until it reaches its destination, avoiding failed connections along the way. Tap the glowing gold nodes to route the packet from <strong>SRC</strong> to <strong>DST</strong>, avoiding blocked (red) nodes. Only glowing nodes are your next legal move &mdash; up, down, left, or right.</div>
     <div class="grid-wrap"><div class="maze" id="maze"></div></div>
     <div class="footer-nav" style="margin-bottom:6px;">
       <button class="btn secondary small" onclick="playBlip('click'); resetMaze()">RESET PATH</button>
@@ -957,18 +963,22 @@ function resetMaze(){ initMaze(); }
 function renderMaze(){
   const wrap = document.getElementById('maze');
   wrap.innerHTML = '';
+  const last = mazePath[mazePath.length-1];
   for (let r=0;r<mazeLayout.length;r++){
     for (let c=0;c<mazeLayout[0].length;c++){
       const div = document.createElement('div');
       const isSource = r===mazeSource.r && c===mazeSource.c;
       const isDest = r===mazeDest.r && c===mazeDest.c;
       const inPath = mazePath.some(p=>p.r===r && p.c===c);
+      const isBacktrack = mazePath.length>=2 && mazePath[mazePath.length-2].r===r && mazePath[mazePath.length-2].c===c;
+      const isReachable = !inPath && mazeLayout[r][c]!==1 && Math.abs(last.r-r)+Math.abs(last.c-c)===1;
       let cls = 'node';
       let label = '';
       if (mazeLayout[r][c]===1){ cls += ' blocked'; label='X'; }
       if (isSource){ cls += ' source'; label='SRC'; }
       if (isDest){ cls += ' dest'; label='DST'; }
       if (inPath && !isSource && !isDest){ cls += ' path'; label='*'; }
+      if (isReachable || isBacktrack){ cls += ' reachable'; }
       div.className = cls;
       div.textContent = label;
       if (mazeLayout[r][c]!==1){
@@ -981,16 +991,24 @@ function renderMaze(){
   }
 }
 function handleMazeClick(r,c){
+  const fb = document.getElementById('m5Feedback');
   const last = mazePath[mazePath.length-1];
   const already = mazePath.findIndex(p=>p.r===r && p.c===c);
   if (already === mazePath.length-2){
     mazePath.pop();
     playBlip('click');
+    fb.textContent = '';
     renderMaze();
     return;
   }
   const isAdjacent = Math.abs(last.r-r)+Math.abs(last.c-c) === 1;
-  if (!isAdjacent || already !== -1) return;
+  if (!isAdjacent || already !== -1){
+    playBlip('err');
+    fb.textContent = 'Not connected \u2014 tap a glowing gold node next to your last stop.';
+    fb.className = 'feedback err';
+    return;
+  }
+  fb.textContent = '';
   mazePath.push({r,c});
   playBlip('click');
   renderMaze();
@@ -1074,19 +1092,25 @@ function initBonusMaze(){
 function renderBonusMaze(){
   const wrap = document.getElementById('bonusMaze');
   wrap.innerHTML = '';
-  wrap.style.gridTemplateColumns = `repeat(${bonusMazeLayout[0].length}, 46px)`;
+  wrap.style.gridTemplateColumns = `repeat(${bonusMazeLayout[0].length}, 52px)`;
+  wrap.style.gridAutoRows = '52px';
+  wrap.style.gap = '7px';
+  const last = bonusMazePath[bonusMazePath.length-1];
   for (let r=0;r<bonusMazeLayout.length;r++){
     for (let c=0;c<bonusMazeLayout[0].length;c++){
       const div = document.createElement('div');
       const isSource = r===bonusMazeSource.r && c===bonusMazeSource.c;
       const isDest = r===bonusMazeDest.r && c===bonusMazeDest.c;
       const inPath = bonusMazePath.some(p=>p.r===r && p.c===c);
+      const isBacktrack = bonusMazePath.length>=2 && bonusMazePath[bonusMazePath.length-2].r===r && bonusMazePath[bonusMazePath.length-2].c===c;
+      const isReachable = !inPath && bonusMazeLayout[r][c]!==1 && Math.abs(last.r-r)+Math.abs(last.c-c)===1;
       let cls = 'node';
       let label = '';
       if (bonusMazeLayout[r][c]===1){ cls += ' blocked'; label='X'; }
       if (isSource){ cls += ' source'; label='SRC'; }
       if (isDest){ cls += ' dest'; label='DST'; }
       if (inPath && !isSource && !isDest){ cls += ' path'; label='*'; }
+      if (isReachable || isBacktrack){ cls += ' reachable'; }
       div.className = cls;
       div.textContent = label;
       if (bonusMazeLayout[r][c]!==1){
@@ -1099,16 +1123,24 @@ function renderBonusMaze(){
   }
 }
 function handleBonusMazeClick(r,c){
+  const fb = document.getElementById('bonusMazeFeedback');
   const last = bonusMazePath[bonusMazePath.length-1];
   const already = bonusMazePath.findIndex(p=>p.r===r && p.c===c);
   if (already === bonusMazePath.length-2){
     bonusMazePath.pop();
     playBlip('click');
+    fb.textContent = '';
     renderBonusMaze();
     return;
   }
   const isAdjacent = Math.abs(last.r-r)+Math.abs(last.c-c) === 1;
-  if (!isAdjacent || already !== -1) return;
+  if (!isAdjacent || already !== -1){
+    playBlip('err');
+    fb.textContent = 'Not connected \u2014 tap a glowing gold node next to your last stop.';
+    fb.className = 'feedback err';
+    return;
+  }
+  fb.textContent = '';
   bonusMazePath.push({r,c});
   playBlip('click');
   renderBonusMaze();
