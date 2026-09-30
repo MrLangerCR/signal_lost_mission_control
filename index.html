@@ -304,6 +304,20 @@
   .choice-card.correct { border-color: var(--green); background: rgba(77,255,160,0.12); }
   .choice-card.wrong { border-color: var(--red); background: rgba(255,93,108,0.1); }
 
+  /* D-pad */
+  .dpad {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    margin: 14px 0 4px;
+  }
+  .dpad-mid { display: flex; gap: 8px; align-items: center; }
+  .dpad-btn {
+    width: 64px; height: 56px;
+    font-size: 1.1rem;
+    padding: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .dpad-undo { width: 84px; font-size: 0.55rem; }
+
   /* Network maze */
   .grid-wrap { overflow-x: auto; padding-bottom: 6px; touch-action: pan-x; }
   .maze {
@@ -313,12 +327,11 @@
   }
   .node {
     display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-title); font-size: 0.55rem; cursor: pointer;
+    font-family: var(--font-title); font-size: 0.55rem; cursor: default;
     background: var(--navy-mid); border: 3px solid #000; color: var(--ink-dim);
-    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
     min-width: 44px; min-height: 44px;
   }
-  .node.blocked { background: rgba(255,93,108,0.15); border-color: var(--red); color: var(--red); cursor: not-allowed; }
+  .node.blocked { background: rgba(255,93,108,0.15); border-color: var(--red); color: var(--red); }
   .node.source { background: rgba(77,255,160,0.2); border-color: var(--green); color: var(--green); }
   .node.dest { background: rgba(255,207,77,0.2); border-color: var(--gold); color: var(--gold); }
   .node.path { background: rgba(77,243,255,0.25); border-color: var(--cyan); color: var(--cyan); }
@@ -529,15 +542,24 @@
   <section class="panel pixel-box hidden" id="screen-m5">
     <p class="eyebrow">LEVEL 5 / 5 &mdash; NETWORKS</p>
     <h2>ROUTE</h2>
-    <div class="log">Data doesn't travel in a straight line &mdash; it hops from node to node until it reaches its destination, avoiding failed connections along the way. Tap the glowing gold nodes to route the packet from <strong>SRC</strong> to <strong>DST</strong>, avoiding blocked (red) nodes. Only glowing nodes are your next legal move &mdash; up, down, left, or right.</div>
+    <div class="log">Data doesn't travel in a straight line &mdash; it hops from node to node until it reaches its destination, avoiding failed connections along the way. Use the arrow buttons below to move the glowing packet from <strong>SRC</strong> to <strong>DST</strong>, avoiding blocked (red) nodes.</div>
     <div class="grid-wrap"><div class="maze" id="maze"></div></div>
-    <div class="footer-nav" style="margin-bottom:6px;">
+    <div class="dpad">
+      <button class="btn dpad-btn" onclick="moveMaze(-1,0)">&#9650;</button>
+      <div class="dpad-mid">
+        <button class="btn dpad-btn" onclick="moveMaze(0,-1)">&#9664;</button>
+        <button class="btn secondary dpad-btn dpad-undo" onclick="undoMaze()">UNDO</button>
+        <button class="btn dpad-btn" onclick="moveMaze(0,1)">&#9654;</button>
+      </div>
+      <button class="btn dpad-btn" onclick="moveMaze(1,0)">&#9660;</button>
+    </div>
+    <div class="footer-nav" style="margin-bottom:6px; margin-top:14px;">
       <button class="btn secondary small" onclick="playBlip('click'); resetMaze()">RESET PATH</button>
       <span class="feedback" id="m5Feedback"></span>
     </div>
     <button class="hint-toggle" onclick="toggleHint('m5')">? HINT</button>
     <div class="hint-box" id="hint-m5">
-      There's more than one working path. If you get stuck, back up a step (click the last node you placed again to remove it) rather than starting completely over.
+      There's more than one working path. If you overshoot, press UNDO to back up one step rather than resetting the whole path.
     </div>
     <div class="reflect-block" id="reflectBlock-m5" style="display:none;">
       <div class="col-label" style="margin-top:16px;">MISSION LOG &mdash; REQUIRED BEFORE LAUNCH</div>
@@ -603,9 +625,18 @@
     <div class="feedback" id="bonusWordFeedback"></div>
 
     <h2 style="font-size:0.8rem; margin-top:30px;">BONUS 2 &mdash; DEEP RELAY ROUTE</h2>
-    <div class="log">A bigger, trickier relay network needs routing. Same rules: click connected nodes, up/down/left/right only, avoid red.</div>
+    <div class="log">A bigger, trickier relay network needs routing. Same rules: arrow buttons only, avoid red.</div>
     <div class="grid-wrap"><div class="maze" id="bonusMaze"></div></div>
-    <div class="footer-nav" style="margin-bottom:6px;">
+    <div class="dpad">
+      <button class="btn dpad-btn" onclick="moveBonusMaze(-1,0)">&#9650;</button>
+      <div class="dpad-mid">
+        <button class="btn dpad-btn" onclick="moveBonusMaze(0,-1)">&#9664;</button>
+        <button class="btn secondary dpad-btn dpad-undo" onclick="undoBonusMaze()">UNDO</button>
+        <button class="btn dpad-btn" onclick="moveBonusMaze(0,1)">&#9654;</button>
+      </div>
+      <button class="btn dpad-btn" onclick="moveBonusMaze(1,0)">&#9660;</button>
+    </div>
+    <div class="footer-nav" style="margin-bottom:6px; margin-top:14px;">
       <button class="btn secondary small" onclick="playBlip('click'); initBonusMaze()">RESET PATH</button>
       <span class="feedback" id="bonusMazeFeedback"></span>
     </div>
@@ -963,14 +994,14 @@ function resetMaze(){ initMaze(); }
 function renderMaze(){
   const wrap = document.getElementById('maze');
   wrap.innerHTML = '';
-  const last = mazePath[mazePath.length-1];
+  const last = mazePath.length ? mazePath[mazePath.length-1] : mazeSource;
   for (let r=0;r<mazeLayout.length;r++){
     for (let c=0;c<mazeLayout[0].length;c++){
       const div = document.createElement('div');
       const isSource = r===mazeSource.r && c===mazeSource.c;
       const isDest = r===mazeDest.r && c===mazeDest.c;
       const inPath = mazePath.some(p=>p.r===r && p.c===c);
-      const isBacktrack = mazePath.length>=2 && mazePath[mazePath.length-2].r===r && mazePath[mazePath.length-2].c===c;
+      const isCurrent = r===last.r && c===last.c;
       const isReachable = !inPath && mazeLayout[r][c]!==1 && Math.abs(last.r-r)+Math.abs(last.c-c)===1;
       let cls = 'node';
       let label = '';
@@ -978,48 +1009,67 @@ function renderMaze(){
       if (isSource){ cls += ' source'; label='SRC'; }
       if (isDest){ cls += ' dest'; label='DST'; }
       if (inPath && !isSource && !isDest){ cls += ' path'; label='*'; }
-      if (isReachable || isBacktrack){ cls += ' reachable'; }
+      if (isCurrent && !isSource){ cls += ' path'; label='*'; }
+      if (isReachable){ cls += ' reachable'; }
       div.className = cls;
       div.textContent = label;
-      if (mazeLayout[r][c]!==1){
-        div.onclick = ()=>handleMazeClick(r,c);
-      } else {
-        div.classList.add('disabled');
-      }
       wrap.appendChild(div);
     }
   }
 }
-function handleMazeClick(r,c){
-  const fb = document.getElementById('m5Feedback');
-  const last = mazePath[mazePath.length-1];
-  const already = mazePath.findIndex(p=>p.r===r && p.c===c);
-  if (already === mazePath.length-2){
-    mazePath.pop();
-    playBlip('click');
-    fb.textContent = '';
-    renderMaze();
-    return;
+
+/* Shared directional-move logic for both mazes. Mutates `path` in place.
+   Guarded so the path can never shrink below the source node (this guard
+   is what was missing before and caused the crash-to-blank-grid bug). */
+function attemptDirectionalMove(path, layout, dr, dc, dest){
+  if (!path.length) return {ok:false, msg:'Path reset unexpectedly \u2014 press RESET PATH.'};
+  const last = path[path.length-1];
+  const target = {r:last.r+dr, c:last.c+dc};
+  if (target.r<0 || target.r>=layout.length || target.c<0 || target.c>=layout[0].length){
+    return {ok:false, msg:'That direction runs off the grid.'};
   }
-  const isAdjacent = Math.abs(last.r-r)+Math.abs(last.c-c) === 1;
-  if (!isAdjacent || already !== -1){
+  if (layout[target.r][target.c]===1){
+    return {ok:false, msg:'That connection is blocked (red) \u2014 try another direction.'};
+  }
+  const idx = path.findIndex(p=>p.r===target.r && p.c===target.c);
+  if (path.length>=2 && idx === path.length-2){
+    path.pop();
+    return {ok:true, backtrack:true};
+  }
+  if (idx !== -1){
+    return {ok:false, msg:'You\u2019ve already routed through there.'};
+  }
+  path.push(target);
+  return {ok:true, arrived: target.r===dest.r && target.c===dest.c};
+}
+function moveMaze(dr,dc){
+  const fb = document.getElementById('m5Feedback');
+  const result = attemptDirectionalMove(mazePath, mazeLayout, dr, dc, mazeDest);
+  if (!result.ok){
     playBlip('err');
-    fb.textContent = 'Not connected \u2014 tap a glowing gold node next to your last stop.';
+    fb.textContent = result.msg;
     fb.className = 'feedback err';
     return;
   }
-  fb.textContent = '';
-  mazePath.push({r,c});
   playBlip('click');
+  fb.textContent = '';
   renderMaze();
-  if (r===mazeDest.r && c===mazeDest.c){
-    document.getElementById('m5Feedback').textContent = 'PACKET DELIVERED! Recovery piece earned: Y';
-    document.getElementById('m5Feedback').className = 'feedback ok';
+  if (result.arrived){
+    fb.textContent = 'PACKET DELIVERED! Recovery piece earned: Y';
+    fb.className = 'feedback ok';
+    document.getElementById('m5Next').disabled = false;
     earnedPieces['m5'] = 'Y';
     renderDots();
     playBlip('ok');
     armReflection('m5');
   }
+}
+function undoMaze(){
+  if (mazePath.length <= 1) return;
+  mazePath.pop();
+  playBlip('click');
+  document.getElementById('m5Feedback').textContent = '';
+  renderMaze();
 }
 
 /* ---------- FINAL ---------- */
@@ -1095,14 +1145,14 @@ function renderBonusMaze(){
   wrap.style.gridTemplateColumns = `repeat(${bonusMazeLayout[0].length}, 52px)`;
   wrap.style.gridAutoRows = '52px';
   wrap.style.gap = '7px';
-  const last = bonusMazePath[bonusMazePath.length-1];
+  const last = bonusMazePath.length ? bonusMazePath[bonusMazePath.length-1] : bonusMazeSource;
   for (let r=0;r<bonusMazeLayout.length;r++){
     for (let c=0;c<bonusMazeLayout[0].length;c++){
       const div = document.createElement('div');
       const isSource = r===bonusMazeSource.r && c===bonusMazeSource.c;
       const isDest = r===bonusMazeDest.r && c===bonusMazeDest.c;
       const inPath = bonusMazePath.some(p=>p.r===r && p.c===c);
-      const isBacktrack = bonusMazePath.length>=2 && bonusMazePath[bonusMazePath.length-2].r===r && bonusMazePath[bonusMazePath.length-2].c===c;
+      const isCurrent = r===last.r && c===last.c;
       const isReachable = !inPath && bonusMazeLayout[r][c]!==1 && Math.abs(last.r-r)+Math.abs(last.c-c)===1;
       let cls = 'node';
       let label = '';
@@ -1110,45 +1160,38 @@ function renderBonusMaze(){
       if (isSource){ cls += ' source'; label='SRC'; }
       if (isDest){ cls += ' dest'; label='DST'; }
       if (inPath && !isSource && !isDest){ cls += ' path'; label='*'; }
-      if (isReachable || isBacktrack){ cls += ' reachable'; }
+      if (isCurrent && !isSource){ cls += ' path'; label='*'; }
+      if (isReachable){ cls += ' reachable'; }
       div.className = cls;
       div.textContent = label;
-      if (bonusMazeLayout[r][c]!==1){
-        div.onclick = ()=>handleBonusMazeClick(r,c);
-      } else {
-        div.classList.add('disabled');
-      }
       wrap.appendChild(div);
     }
   }
 }
-function handleBonusMazeClick(r,c){
+function moveBonusMaze(dr,dc){
   const fb = document.getElementById('bonusMazeFeedback');
-  const last = bonusMazePath[bonusMazePath.length-1];
-  const already = bonusMazePath.findIndex(p=>p.r===r && p.c===c);
-  if (already === bonusMazePath.length-2){
-    bonusMazePath.pop();
-    playBlip('click');
-    fb.textContent = '';
-    renderBonusMaze();
-    return;
-  }
-  const isAdjacent = Math.abs(last.r-r)+Math.abs(last.c-c) === 1;
-  if (!isAdjacent || already !== -1){
+  const result = attemptDirectionalMove(bonusMazePath, bonusMazeLayout, dr, dc, bonusMazeDest);
+  if (!result.ok){
     playBlip('err');
-    fb.textContent = 'Not connected \u2014 tap a glowing gold node next to your last stop.';
+    fb.textContent = result.msg;
     fb.className = 'feedback err';
     return;
   }
-  fb.textContent = '';
-  bonusMazePath.push({r,c});
   playBlip('click');
+  fb.textContent = '';
   renderBonusMaze();
-  if (r===bonusMazeDest.r && c===bonusMazeDest.c){
-    document.getElementById('bonusMazeFeedback').textContent = 'DEEP RELAY ROUTED. Nice work, crew.';
-    document.getElementById('bonusMazeFeedback').className = 'feedback ok';
+  if (result.arrived){
+    fb.textContent = 'DEEP RELAY ROUTED. Nice work, crew.';
+    fb.className = 'feedback ok';
     playBlip('win');
   }
+}
+function undoBonusMaze(){
+  if (bonusMazePath.length <= 1) return;
+  bonusMazePath.pop();
+  playBlip('click');
+  document.getElementById('bonusMazeFeedback').textContent = '';
+  renderBonusMaze();
 }
 
 /* ---------- INIT ---------- */
